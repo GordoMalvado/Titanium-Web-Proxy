@@ -55,6 +55,7 @@ namespace Titanium.Web.Proxy
         {
             var cancellationToken = cancellationTokenSource.Token;
             TcpServerConnection serverConnection = null;
+            bool serverConnectionClose = false;
 
             try
             {
@@ -182,7 +183,7 @@ namespace Titanium.Web.Proxy
                                     || args.WebSession.UpStreamEndPoint?.Equals(serverConnection.UpStreamEndPoint) ==
                                     false))
                             {
-                                serverConnection.Dispose();
+                                tcpConnectionFactory.Release(serverConnection, true);
                                 serverConnection = null;
                             }
 
@@ -241,6 +242,7 @@ namespace Titanium.Web.Proxy
                             // if connection is closing exit
                             if (!response.KeepAlive)
                             {
+                                serverConnectionClose = true;
                                 return;
                             }
 
@@ -257,6 +259,7 @@ namespace Titanium.Web.Proxy
                     catch (Exception e)
                     {
                         args.Exception = e;
+                        serverConnectionClose = true;
                         throw;
                     }
                     finally
@@ -268,7 +271,7 @@ namespace Titanium.Web.Proxy
             }
             finally
             {
-                serverConnection?.Dispose();
+                tcpConnectionFactory.Release(serverConnection, serverConnectionClose || !EnableConnectionPool);
             }
         }
 
@@ -398,13 +401,13 @@ namespace Titanium.Web.Proxy
 
             args.CustomUpStreamProxyUsed = customUpStreamProxy;
 
-            return await tcpConnectionFactory.CreateClient(
+            return await tcpConnectionFactory.GetClient(
                 args.WebSession.Request.RequestUri.Host,
                 args.WebSession.Request.RequestUri.Port,
                 args.WebSession.Request.HttpVersion, 
                 isHttps, applicationProtocols, isConnect,
                 this, args.WebSession.UpStreamEndPoint ?? UpStreamEndPoint,
-                customUpStreamProxy ?? (isHttps ? UpStreamHttpsProxy : UpStreamHttpProxy),
+                customUpStreamProxy ?? (isHttps ? args.WebSession.Request.UpStreamHttpsProxy ?? UpStreamHttpsProxy : args.WebSession.Request.UpStreamHttpProxy ?? UpStreamHttpProxy),
                 cancellationToken);
         }
 
